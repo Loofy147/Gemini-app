@@ -3,13 +3,16 @@
 <head>
   <title>Gemini CLI Web App</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/default.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 </head>
 <body>
   <main class="container">
     <h1>Gemini CLI Web App</h1>
   <form id="gemini-form">
     <label for="command">Command:</label>
-    <input type="text" id="command" name="command" required>
+    <input type="text" id="command" name="command" required list="command-history">
+    <datalist id="command-history"></datalist>
     <button type="submit">Run</button>
   </form>
   <pre id="output"></pre>
@@ -56,14 +59,25 @@
         output.textContent += data;
       } else if (type === 'close') {
         output.textContent += `\nProcess exited with code ${code}`;
+        hljs.highlightElement(output);
       }
     };
+
+    const commandHistory = [];
+    const commandHistoryDatalist = document.getElementById('command-history');
 
     document.getElementById('gemini-form').addEventListener('submit', (e) => {
       e.preventDefault();
       const command = document.getElementById('command').value;
       output.textContent = '';
       socket.send(JSON.stringify({ command }));
+
+      if (!commandHistory.includes(command)) {
+        commandHistory.push(command);
+        const option = document.createElement('option');
+        option.value = command;
+        commandHistoryDatalist.appendChild(option);
+      }
     });
 
     document.getElementById('github-form').addEventListener('submit', async (e) => {

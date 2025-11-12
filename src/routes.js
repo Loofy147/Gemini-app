@@ -34,6 +34,9 @@ const validate = (schema, source = 'body') => (req, res, next) => {
 
 const authenticate = (req, res, next) => {
   if (!req.session.apiKey) {
+    if (req.headers.accept && req.headers.accept.includes('application/json')) {
+      return res.status(401).send('Unauthorized');
+    }
     return res.redirect('/login.html');
   }
   next();
