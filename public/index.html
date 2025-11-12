@@ -2,9 +2,11 @@
 <html>
 <head>
   <title>Gemini CLI Web App</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css">
 </head>
 <body>
-  <h1>Gemini CLI Web App</h1>
+  <main class="container">
+    <h1>Gemini CLI Web App</h1>
   <form id="gemini-form">
     <label for="command">Command:</label>
     <input type="text" id="command" name="command" required>
@@ -34,22 +36,34 @@
   </form>
   <p id="action-status"></p>
 
+  <h2>List GitHub Workflows</h2>
+  <form id="list-workflows-form">
+    <label for="list-owner">Owner:</label>
+    <input type="text" id="list-owner" name="owner" required>
+    <label for="list-repo">Repo:</label>
+    <input type="text" id="list-repo" name="repo" required>
+    <button type="submit">List Workflows</button>
+  </form>
+  <ul id="workflows"></ul>
+
   <script>
-    document.getElementById('gemini-form').addEventListener('submit', async (e) => {
+    const output = document.getElementById('output');
+    const socket = new WebSocket(`ws://${window.location.host}`);
+
+    socket.onmessage = (event) => {
+      const { type, data, code } = JSON.parse(event.data);
+      if (type === 'stdout' || type === 'stderr') {
+        output.textContent += data;
+      } else if (type === 'close') {
+        output.textContent += `\nProcess exited with code ${code}`;
+      }
+    };
+
+    document.getElementById('gemini-form').addEventListener('submit', (e) => {
       e.preventDefault();
       const command = document.getElementById('command').value;
-      const output = document.getElementById('output');
-      output.textContent = 'Running...';
-
-      const response = await fetch('/gemini', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ command }),
-      });
-      const text = await response.text();
-      output.textContent = text;
+      output.textContent = '';
+      socket.send(JSON.stringify({ command }));
     });
 
     document.getElementById('github-form').addEventListener('submit', async (e) => {
@@ -87,6 +101,24 @@
       });
       const text = await response.text();
       status.textContent = text;
+    });
+
+    document.getElementById('list-workflows-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const owner = document.getElementById('list-owner').value;
+      const repo = document.getElementById('list-repo').value;
+      const workflowsList = document.getElementById('workflows');
+      workflowsList.innerHTML = 'Loading...';
+
+      const response = await fetch(`/github/actions/workflows?owner=${owner}&repo=${repo}`);
+      const data = await response.json();
+
+      workflowsList.innerHTML = '';
+      data.workflows.forEach(workflow => {
+        const li = document.createElement('li');
+        li.textContent = `${workflow.name} (ID: ${workflow.id})`;
+        workflowsList.appendChild(li);
+      });
     });
   </script>
 </body>

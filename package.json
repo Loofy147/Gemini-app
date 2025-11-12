@@ -12,6 +12,7 @@
     "body-parser": "^1.20.2",
     "express": "^4.17.1",
     "express-session": "^1.18.0",
-    "string-argv": "^0.3.2"
+    "string-argv": "^0.3.2",
+    "ws": "^8.18.3"
   }
 }
