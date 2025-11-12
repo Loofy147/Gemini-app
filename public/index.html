@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Gemini CLI Web App</title>
+</head>
+<body>
+  <h1>Gemini CLI Web App</h1>
+  <form id="gemini-form">
+    <label for="command">Command:</label>
+    <input type="text" id="command" name="command" required>
+    <button type="submit">Run</button>
+  </form>
+  <pre id="output"></pre>
+
+  <h2>GitHub Pull Requests</h2>
+  <form id="github-form">
+    <label for="owner">Owner:</label>
+    <input type="text" id="owner" name="owner" required>
+    <label for="repo">Repo:</label>
+    <input type="text" id="repo" name="repo" required>
+    <button type="submit">Get PRs</button>
+  </form>
+  <ul id="prs"></ul>
+
+  <h2>Trigger GitHub Action</h2>
+  <form id="github-action-form">
+    <label for="action-owner">Owner:</label>
+    <input type="text" id="action-owner" name="owner" required>
+    <label for="action-repo">Repo:</label>
+    <input type="text" id="action-repo" name="repo" required>
+    <label for="workflow-id">Workflow ID:</label>
+    <input type="text" id="workflow-id" name="workflow_id" required>
+    <button type="submit">Run Workflow</button>
+  </form>
+  <p id="action-status"></p>
+
+  <script>
+    document.getElementById('gemini-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const command = document.getElementById('command').value;
+      const output = document.getElementById('output');
+      output.textContent = 'Running...';
+
+      const response = await fetch('/gemini', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ command }),
+      });
+      const text = await response.text();
+      output.textContent = text;
+    });
+
+    document.getElementById('github-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const owner = document.getElementById('owner').value;
+      const repo = document.getElementById('repo').value;
+      const prsList = document.getElementById('prs');
+      prsList.innerHTML = 'Loading...';
+
+      const response = await fetch(`/github/prs?owner=${owner}&repo=${repo}`);
+      const prs = await response.json();
+
+      prsList.innerHTML = '';
+      prs.forEach(pr => {
+        const li = document.createElement('li');
+        li.innerHTML = `<a href="${pr.html_url}">${pr.title}</a>`;
+        prsList.appendChild(li);
+      });
+    });
+
+    document.getElementById('github-action-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const owner = document.getElementById('action-owner').value;
+      const repo = document.getElementById('action-repo').value;
+      const workflow_id = document.getElementById('workflow-id').value;
+      const status = document.getElementById('action-status');
+      status.textContent = 'Triggering...';
+
+      const response = await fetch('/github/actions/run', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ owner, repo, workflow_id }),
+      });
+      const text = await response.text();
+      status.textContent = text;
+    });
+  </script>
+</body>
+</html>

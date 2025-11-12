@@ -1,0 +1,17 @@
+{
+  "name": "gemini-app",
+  "version": "1.0.0",
+  "description": "A web app for the Gemini CLI",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "postinstall": "cd gemini-cli/cmd/gemini && go build"
+  },
+  "dependencies": {
+    "axios": "^1.7.2",
+    "body-parser": "^1.20.2",
+    "express": "^4.17.1",
+    "express-session": "^1.18.0",
+    "string-argv": "^0.3.2"
+  }
+}
