@@ -5,9 +5,23 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/default.min.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <style>
+    .dark-mode {
+      background-color: #111;
+      color: #fff;
+    }
+  </style>
 </head>
 <body>
   <main class="container">
+    <nav>
+      <ul>
+        <li><strong>Gemini CLI Web App</strong></li>
+      </ul>
+      <ul>
+        <li><a href="#" id="theme-switcher">Switch Theme</a></li>
+      </ul>
+    </nav>
     <h1>Gemini CLI Web App</h1>
   <form id="gemini-form">
     <label for="command">Command:</label>
@@ -16,6 +30,7 @@
     <button type="submit">Run</button>
   </form>
   <pre id="output"></pre>
+  <button id="clear-output">Clear</button>
 
   <h2>GitHub Pull Requests</h2>
   <form id="github-form">
@@ -49,9 +64,27 @@
   </form>
   <ul id="workflows"></ul>
 
+  <dialog id="diff-modal">
+    <article>
+      <header>
+        <a href="#close" aria-label="Close" class="close"></a>
+        Diff
+      </header>
+      <pre id="diff-output"></pre>
+      <footer>
+        <form id="comment-form">
+          <label for="comment">Comment:</label>
+          <textarea id="comment" name="comment" required></textarea>
+          <button type="submit">Post Comment</button>
+        </form>
+      </footer>
+    </article>
+  </dialog>
+
   <script>
     const output = document.getElementById('output');
     const socket = new WebSocket(`ws://${window.location.host}`);
+    const commandHistoryDatalist = document.getElementById('command-history');
 
     socket.onmessage = (event) => {
       const { type, data, code } = JSON.parse(event.data);
@@ -60,24 +93,28 @@
       } else if (type === 'close') {
         output.textContent += `\nProcess exited with code ${code}`;
         hljs.highlightElement(output);
+      } else if (type === 'history') {
+        data.forEach(command => {
+          const option = document.createElement('option');
+          option.value = command;
+          commandHistoryDatalist.appendChild(option);
+        });
       }
     };
-
-    const commandHistory = [];
-    const commandHistoryDatalist = document.getElementById('command-history');
 
     document.getElementById('gemini-form').addEventListener('submit', (e) => {
       e.preventDefault();
       const command = document.getElementById('command').value;
       output.textContent = '';
       socket.send(JSON.stringify({ command }));
+    });
 
-      if (!commandHistory.includes(command)) {
-        commandHistory.push(command);
-        const option = document.createElement('option');
-        option.value = command;
-        commandHistoryDatalist.appendChild(option);
-      }
+    document.getElementById('clear-output').addEventListener('click', () => {
+      output.textContent = '';
+    });
+
+    document.getElementById('theme-switcher').addEventListener('click', () => {
+      document.body.classList.toggle('dark-mode');
     });
 
     document.getElementById('github-form').addEventListener('submit', async (e) => {
@@ -93,9 +130,45 @@
       prsList.innerHTML = '';
       prs.forEach(pr => {
         const li = document.createElement('li');
-        li.innerHTML = `<a href="${pr.html_url}">${pr.title}</a>`;
+        li.innerHTML = `<a href="${pr.html_url}">${pr.title}</a> <button class="view-diff" data-pr="${pr.number}">View Diff</button>`;
         prsList.appendChild(li);
       });
+    });
+
+    let currentPrNumber;
+
+    document.getElementById('prs').addEventListener('click', async (e) => {
+      if (e.target.classList.contains('view-diff')) {
+        const owner = document.getElementById('owner').value;
+        const repo = document.getElementById('repo').value;
+        currentPrNumber = e.target.dataset.pr;
+        const diffOutput = document.getElementById('diff-output');
+        diffOutput.textContent = 'Loading...';
+        document.getElementById('diff-modal').showModal();
+
+        const response = await fetch(`/github/prs/${currentPrNumber}/diff?owner=${owner}&repo=${repo}`);
+        const diff = await response.text();
+        diffOutput.textContent = diff;
+      }
+    });
+
+    document.getElementById('comment-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const owner = document.getElementById('owner').value;
+      const repo = document.getElementById('repo').value;
+      const comment = document.getElementById('comment').value;
+
+      const response = await fetch(`/github/prs/${currentPrNumber}/comments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ owner, repo, comment }),
+      });
+
+      if (response.ok) {
+        document.getElementById('diff-modal').close();
+      }
     });
 
     document.getElementById('github-action-form').addEventListener('submit', async (e) => {

@@ -13,6 +13,17 @@ const schemas = {
     owner: Joi.string().required(),
     repo: Joi.string().required(),
   }),
+  githubPrDiff: Joi.object({
+    owner: Joi.string().required(),
+    repo: Joi.string().required(),
+    pull_number: Joi.number().required(),
+  }),
+  githubPrComment: Joi.object({
+    owner: Joi.string().required(),
+    repo: Joi.string().required(),
+    pull_number: Joi.number().required(),
+    comment: Joi.string().required(),
+  }),
   githubActionsRun: Joi.object({
     owner: Joi.string().required(),
     repo: Joi.string().required(),
@@ -60,6 +71,43 @@ router.get('/github/prs', authenticate, validate(schemas.githubPrs, 'query'), as
     res.json(response.data);
   } catch (error) {
     res.status(500).send('Error fetching pull requests');
+  }
+});
+
+router.get('/github/prs/:pull_number/diff', authenticate, validate(schemas.githubPrDiff, 'params'), async (req, res) => {
+  const { owner, repo, pull_number } = req.params;
+
+  try {
+    const headers = {
+      Accept: 'application/vnd.github.v3.diff',
+    };
+    if (req.session.githubToken) {
+      headers.Authorization = `token ${req.session.githubToken}`;
+    }
+    const response = await axios.get(`https://api.github.com/repos/${owner}/${repo}/pulls/${pull_number}`, { headers });
+    res.send(response.data);
+  } catch (error) {
+    res.status(500).send('Error fetching pull request diff');
+  }
+});
+
+router.post('/github/prs/:pull_number/comments', authenticate, validate(schemas.githubPrComment), async (req, res) => {
+  const { owner, repo, pull_number } = req.params;
+  const { comment } = req.body;
+
+  try {
+    const headers = {
+      Accept: 'application/vnd.github.v3+json',
+    };
+    if (req.session.githubToken) {
+      headers.Authorization = `token ${req.session.githubToken}`;
+    }
+    await axios.post(`https://api.github.com/repos/${owner}/${repo}/issues/${pull_number}/comments`, {
+      body: comment
+    }, { headers });
+    res.send('Comment posted');
+  } catch (error) {
+    res.status(500).send('Error posting comment');
   }
 });
 
