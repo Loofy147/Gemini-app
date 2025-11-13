@@ -1,37 +1,21 @@
 const express = require('express');
-const axios = require('axios');
 const Joi = require('joi');
+const User = require('./models/User');
 
 const router = express.Router();
 
 const schemas = {
+  register: Joi.object({
+    username: Joi.string().required(),
+    password: Joi.string().required(),
+  }),
   login: Joi.object({
-    apiKey: Joi.string().required(),
+    username: Joi.string().required(),
+    password: Joi.string().required(),
+  }),
+  settings: Joi.object({
+    geminiApiKey: Joi.string().allow(''),
     githubToken: Joi.string().allow(''),
-  }),
-  githubPrs: Joi.object({
-    owner: Joi.string().required(),
-    repo: Joi.string().required(),
-  }),
-  githubPrDiff: Joi.object({
-    owner: Joi.string().required(),
-    repo: Joi.string().required(),
-    pull_number: Joi.number().required(),
-  }),
-  githubPrComment: Joi.object({
-    owner: Joi.string().required(),
-    repo: Joi.string().required(),
-    pull_number: Joi.number().required(),
-    comment: Joi.string().required(),
-  }),
-  githubActionsRun: Joi.object({
-    owner: Joi.string().required(),
-    repo: Joi.string().required(),
-    workflow_id: Joi.string().required(),
-  }),
-  githubActionsWorkflows: Joi.object({
-    owner: Joi.string().required(),
-    repo: Joi.string().required(),
   }),
 };
 
@@ -43,106 +27,48 @@ const validate = (schema, source = 'body') => (req, res, next) => {
   next();
 };
 
-const authenticate = (req, res, next) => {
-  if (!req.session.apiKey) {
+const authenticate = async (req, res, next) => {
+  if (!req.session.userId) {
     if (req.headers.accept && req.headers.accept.includes('application/json')) {
       return res.status(401).send('Unauthorized');
     }
     return res.redirect('/login.html');
   }
+  req.user = await User.findByPk(req.session.userId);
   next();
 };
 
-router.post('/login', validate(schemas.login), (req, res) => {
-  req.session.apiKey = req.body.apiKey;
-  req.session.githubToken = req.body.githubToken;
-  res.redirect('/');
-});
-
-router.get('/github/prs', authenticate, validate(schemas.githubPrs, 'query'), async (req, res) => {
-  const { owner, repo } = req.query;
-
+router.post('/register', validate(schemas.register), async (req, res) => {
   try {
-    const headers = {};
-    if (req.session.githubToken) {
-      headers.Authorization = `token ${req.session.githubToken}`;
-    }
-    const response = await axios.get(`https://api.github.com/repos/${owner}/${repo}/pulls`, { headers });
-    res.json(response.data);
+    const user = await User.create(req.body);
+    req.session.userId = user.id;
+    res.redirect('/');
   } catch (error) {
-    res.status(500).send('Error fetching pull requests');
+    res.status(400).send('Username already exists');
   }
 });
 
-router.get('/github/prs/:pull_number/diff', authenticate, validate(schemas.githubPrDiff, 'params'), async (req, res) => {
-  const { owner, repo, pull_number } = req.params;
-
-  try {
-    const headers = {
-      Accept: 'application/vnd.github.v3.diff',
-    };
-    if (req.session.githubToken) {
-      headers.Authorization = `token ${req.session.githubToken}`;
-    }
-    const response = await axios.get(`https://api.github.com/repos/${owner}/${repo}/pulls/${pull_number}`, { headers });
-    res.send(response.data);
-  } catch (error) {
-    res.status(500).send('Error fetching pull request diff');
+router.post('/login', validate(schemas.login), async (req, res) => {
+  const user = await User.findOne({ where: { username: req.body.username } });
+  if (user && await user.validPassword(req.body.password)) {
+    req.session.userId = user.id;
+    res.redirect('/');
+  } else {
+    res.status(401).send('Invalid username or password');
   }
 });
 
-router.post('/github/prs/:pull_number/comments', authenticate, validate(schemas.githubPrComment), async (req, res) => {
-  const { owner, repo, pull_number } = req.params;
-  const { comment } = req.body;
-
+router.post('/settings', authenticate, validate(schemas.settings), async (req, res) => {
   try {
-    const headers = {
-      Accept: 'application/vnd.github.v3+json',
-    };
-    if (req.session.githubToken) {
-      headers.Authorization = `token ${req.session.githubToken}`;
-    }
-    await axios.post(`https://api.github.com/repos/${owner}/${repo}/issues/${pull_number}/comments`, {
-      body: comment
-    }, { headers });
-    res.send('Comment posted');
+    await req.user.update(req.body);
+    res.redirect('/');
   } catch (error) {
-    res.status(500).send('Error posting comment');
+    res.status(500).send('Error updating settings');
   }
 });
 
-router.post('/github/actions/run', authenticate, validate(schemas.githubActionsRun), async (req, res) => {
-  const { owner, repo, workflow_id } = req.body;
-
-  try {
-    const headers = {
-      'Accept': 'application/vnd.github.v3+json',
-    };
-    if (req.session.githubToken) {
-      headers.Authorization = `token ${req.session.githubToken}`;
-    }
-    await axios.post(`https://api.github.com/repos/${owner}/${repo}/actions/workflows/${workflow_id}/dispatches`, {
-      ref: 'main'
-    }, { headers });
-    res.send('Workflow triggered');
-  } catch (error) {
-    res.status(500).send('Error triggering workflow');
-  }
-});
-
-router.get('/github/actions/workflows', authenticate, validate(schemas.githubActionsWorkflows, 'query'), async (req, res) => {
-  const { owner, repo } = req.query;
-
-  try {
-    const headers = {};
-    if (req.session.githubToken) {
-      headers.Authorization = `token ${req.session.githubToken}`;
-    }
-    const response = await axios.get(`https://api.github.com/repos/${owner}/${repo}/actions/workflows`, { headers });
-    res.json(response.data);
-  } catch (error) {
-    res.status(500).send('Error fetching workflows');
-  }
-});
-
-module.exports = router;
+module.exports = {
+  router,
+  authenticate,
+  validate
+};
